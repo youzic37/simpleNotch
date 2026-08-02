@@ -45,6 +45,20 @@ enum ShelfActionService {
         ShelfStateViewModel.shared.remove(item)
     }
 
+    @discardableResult
+    static func removeSelection() -> Bool {
+        let selection = ShelfSelectionModel.shared
+        let selectedItems = selection.selectedItems(in: ShelfStateViewModel.shared.items)
+        guard !selectedItems.isEmpty else {
+            selection.clear()
+            return false
+        }
+
+        ShelfStateViewModel.shared.remove(selectedItems)
+        selection.clear()
+        return true
+    }
+
     private static func handleBookmarkedFile(_ bookmarkData: Data, action: @escaping @Sendable (URL) -> Void) {
         Task {
             let bookmark = Bookmark(data: bookmarkData)
@@ -56,4 +70,3 @@ enum ShelfActionService {
         }
     }
 }
-

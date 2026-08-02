@@ -1,175 +1,174 @@
-name: "Reusable Build"
+name: Reusable simpleNotch Preview Build
+
 on:
   workflow_call:
     inputs:
       head_ref:
-        required: true
+        description: Git ref to build
+        required: false
         type: string
+        default: main
       version:
+        description: Numeric marketing version override
         required: false
         type: string
       build_number:
+        description: Numeric build number override
         required: false
         type: string
-      xcode_version:
-        required: false
-        type: string
-        default: "16.4"
-      code_sign_identity:
-        required: false
-        type: string
-        default: "Apple Development"
-    secrets:
-      BUILD_CERTIFICATE_BASE64:
-        required: true
-      P12_PASSWORD:
-        required: true
-      KEYCHAIN_PASSWORD:
-        required: true
 
 jobs:
   build:
+    name: Build ad-hoc preview
     runs-on: macos-latest
     permissions:
-      contents: write
+      contents: read
     env:
       PROJECT_NAME: boringNotch
-      EXPORT_METHOD: development
+      APP_NAME: simpleNotch
       VERSION_INPUT: ${{ inputs.version }}
       BUILD_NUMBER_INPUT: ${{ inputs.build_number }}
-      DEVELOPMENT_TEAM: ${{ vars.DEVELOPMENT_TEAM_ID }}
-      CODE_SIGN_IDENTITY: ${{ inputs.code_sign_identity }}
-      XCODE_VERSION: ${{ inputs.xcode_version }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.head_ref }}
 
+      - name: Show Xcode version
+        run: xcodebuild -version
+
       - name: Resolve Swift packages
-        run: xcodebuild -resolvePackageDependencies -project ${{ env.PROJECT_NAME }}.xcodeproj
+        run: xcodebuild -resolvePackageDependencies -project "${PROJECT_NAME}.xcodeproj"
 
-      - name: Install Apple certificate
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      - name: Build ad-hoc preview
+        shell: bash
         run: |
-          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
-          KC="$RUNNER_TEMP/app-signing.keychain-db"
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KC"
-          security set-keychain-settings -lut 21600 "$KC"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KC"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
-          security list-keychain -d user -s "$KC"
+          set -euo pipefail
 
-      - name: Select Xcode ${{ env.XCODE_VERSION }}
-        run: |
-          XCODE_PATH="/Applications/Xcode_${XCODE_VERSION}.app"
-          if [[ ! -d "$XCODE_PATH" ]]; then
-            echo "::error::Xcode ${XCODE_VERSION} not found at ${XCODE_PATH}"
-            echo "Available Xcode versions:"
-            ls -d /Applications/Xcode*.app 2>/dev/null || echo "  (none found)"
+          BUILD_NUMBER="${BUILD_NUMBER_INPUT:-$GITHUB_RUN_NUMBER}"
+          [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || {
+            echo "::error::Build number must be numeric"
+            exit 1
+          }
+          if [[ -n "$VERSION_INPUT" && ! "$VERSION_INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must match X.Y.Z"
             exit 1
           fi
-          sudo xcode-select -s "$XCODE_PATH"
-          xcodebuild -version
+          BUILD_ARGS=(
+            clean build
+            -project "${PROJECT_NAME}.xcodeproj"
+            -scheme "${PROJECT_NAME}"
+            -configuration Release
+            -destination "generic/platform=macOS"
+            -derivedDataPath "$RUNNER_TEMP/DerivedData"
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+            CODE_SIGN_STYLE=Manual
+            CODE_SIGN_IDENTITY=-
+            DEVELOPMENT_TEAM=
+            CODE_SIGNING_ALLOWED=YES
+            CODE_SIGNING_REQUIRED=YES
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
+            ENABLE_HARDENED_RUNTIME=NO
+            ONLY_ACTIVE_ARCH=NO
+          )
 
-      - name: Set version and build number
-        run: |
-          PBXPROJ="${{ env.PROJECT_NAME }}.xcodeproj/project.pbxproj"
-          VERSION="${{ env.VERSION_INPUT }}"
-          BUILD_NUMBER_INPUT="${{ env.BUILD_NUMBER_INPUT }}"
-          if [[ -z "$BUILD_NUMBER_INPUT" ]]; then
-            BUILD_NUMBER="$GITHUB_RUN_NUMBER"
-          else
-            BUILD_NUMBER="$BUILD_NUMBER_INPUT"
-          fi
-          if [[ -n "$VERSION" ]]; then
-            sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = ${VERSION}/g" "$PBXPROJ"
-          fi
-          sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER}/g" "$PBXPROJ"
-
-      - name: Commit version changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${{ env.PROJECT_NAME }}.xcodeproj/project.pbxproj"
-          VERSION="${{ env.VERSION_INPUT }}"
-          BUILD_NUMBER_INPUT="${{ env.BUILD_NUMBER_INPUT }}"
-          if [[ -z "$BUILD_NUMBER_INPUT" ]]; then
-            BUILD_NUMBER="$GITHUB_RUN_NUMBER"
-          else
-            BUILD_NUMBER="$BUILD_NUMBER_INPUT"
-          fi
-          if [[ -n "$VERSION" ]]; then
-            COMMIT_MSG="Set version to v${VERSION} (build ${BUILD_NUMBER})"
-          else
-            COMMIT_MSG="Set build number to ${BUILD_NUMBER}"
-          fi
-          git commit -m "$COMMIT_MSG" || true
-          git push origin "HEAD:${{ inputs.head_ref }}" || true
-
-      - name: Build and archive
-        run: |
-          xcodebuild clean archive \
-            -project ${{ env.PROJECT_NAME }}.xcodeproj \
-            -scheme ${{ env.PROJECT_NAME }} \
-            -archivePath ${{ env.PROJECT_NAME }} \
-            -destination "generic/platform=macOS" \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            ONLY_ACTIVE_ARCH=NO \
-            -allowProvisioningUpdates
-
-      - name: Export app
-        run: |
-          cat > "$RUNNER_TEMP/export_options.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>${{ env.EXPORT_METHOD }}</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-            <key>teamID</key>
-            <string>${DEVELOPMENT_TEAM}</string>
-          </dict>
-          </plist>
-          PLIST
-          xcodebuild -exportArchive \
-            -archivePath "${{ env.PROJECT_NAME }}.xcarchive" \
-            -exportPath Release \
-            -exportOptionsPlist "$RUNNER_TEMP/export_options.plist"
-
-      - name: Verify generate_appcast exists
-        run: |
-          if [ ! -x Configuration/sparkle/generate_appcast ]; then
-            echo "::warning title=Missing generate_appcast::Configuration/sparkle/generate_appcast is not present or not executable; skipping appcast generation verification."
+          if [[ -n "$VERSION_INPUT" ]]; then
+            BUILD_ARGS+=(MARKETING_VERSION="$VERSION_INPUT")
           fi
 
-      - name: Create DMG
+          xcodebuild "${BUILD_ARGS[@]}"
+
+          BUILT_APP="$RUNNER_TEMP/DerivedData/Build/Products/Release/${APP_NAME}.app"
+          test -d "$BUILT_APP"
+          mkdir -p Release
+          test ! -e "Release/${APP_NAME}.app"
+          ditto "$BUILT_APP" "Release/${APP_NAME}.app"
+
+      - name: Verify preview signature and identity
+        shell: bash
         run: |
-          VENV_DIR="$RUNNER_TEMP/venv"
-          python3 -m venv "$VENV_DIR"
-          source "$VENV_DIR/bin/activate"
-          python3 -m pip install --upgrade pip setuptools wheel
+          set -euo pipefail
+
+          APP_PATH="Release/${APP_NAME}.app"
+          EXPECTED_BUILD_NUMBER="${BUILD_NUMBER_INPUT:-$GITHUB_RUN_NUMBER}"
+          codesign --verify --deep --strict "$APP_PATH"
+          SIGNATURE_INFO="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1)"
+          printf '%s\n' "$SIGNATURE_INFO"
+          grep -q '^Signature=adhoc$' <<<"$SIGNATURE_INFO"
+          if grep -q '^Authority=' <<<"$SIGNATURE_INFO"; then
+            echo "::error::Preview workflow must not claim a Developer ID identity"
+            exit 1
+          fi
+
+          test "$(defaults read "$PWD/$APP_PATH/Contents/Info" CFBundleDisplayName)" = "$APP_NAME"
+          test "$(defaults read "$PWD/$APP_PATH/Contents/Info" CFBundleIdentifier)" = "com.github.wutao-maker.simpleNotch"
+          test "$(defaults read "$PWD/$APP_PATH/Contents/Info" CFBundleVersion)" = "$EXPECTED_BUILD_NUMBER"
+          if [[ -n "$VERSION_INPUT" ]]; then
+            test "$(defaults read "$PWD/$APP_PATH/Contents/Info" CFBundleShortVersionString)" = "$VERSION_INPUT"
+          fi
+
+          MACH_O_COUNT=0
+          while IFS= read -r CANDIDATE; do
+            if file "$CANDIDATE" | grep -q 'Mach-O'; then
+              MACH_O_COUNT=$((MACH_O_COUNT + 1))
+              ARCHITECTURES="$(lipo -archs "$CANDIDATE")"
+              printf '%s: %s\n' "$CANDIDATE" "$ARCHITECTURES"
+              [[ " $ARCHITECTURES " == *" arm64 "* ]]
+              [[ " $ARCHITECTURES " == *" x86_64 "* ]]
+            fi
+          done < <(find "$APP_PATH" -type f -perm -111 -print)
+          test "$MACH_O_COUNT" -gt 0
+
+      - name: Install hash-pinned DMG dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/dmg-venv"
+          source "$RUNNER_TEMP/dmg-venv/bin/activate"
           python3 -m pip install --require-hashes -r Configuration/dmg/requirements.txt
+
+      - name: Create and verify DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/dmg-venv/bin/activate"
+          PACKAGE_LICENSES_DIR="Release/Swift Package Licenses"
+          mkdir -p "$PACKAGE_LICENSES_DIR"
+          while IFS= read -r LICENSE_FILE; do
+            PACKAGE_NAME="$(basename "$(dirname "$LICENSE_FILE")")"
+            cp "$LICENSE_FILE" "$PACKAGE_LICENSES_DIR/${PACKAGE_NAME}-LICENSE.txt"
+          done < <(
+            find "$RUNNER_TEMP/DerivedData/SourcePackages/checkouts" \
+              -maxdepth 2 -type f \
+              \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
+              -print
+          )
+          test "$(find "$PACKAGE_LICENSES_DIR" -type f | wc -l | tr -d ' ')" -ge 10
+
           chmod +x Configuration/dmg/create_dmg.sh
           ./Configuration/dmg/create_dmg.sh \
-            "Release/${{ env.PROJECT_NAME }}.app" \
-            "Release/${{ env.PROJECT_NAME }}.dmg" \
-            "${{ env.PROJECT_NAME }} ${{ env.VERSION_INPUT }}"
+            "Release/${APP_NAME}.app" \
+            "Release/${APP_NAME}.dmg" \
+            "${APP_NAME} Preview" \
+            "$PACKAGE_LICENSES_DIR"
+          hdiutil verify "Release/${APP_NAME}.dmg"
+          (
+            cd Release
+            shasum -a 256 "${APP_NAME}.dmg" > "${APP_NAME}.dmg.sha256"
+          )
 
-      - name: Upload DMG
+      - name: Upload preview DMG
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ env.PROJECT_NAME }}.dmg
-          path: Release/${{ env.PROJECT_NAME }}.dmg
+          name: simpleNotch.dmg
+          path: |
+            Release/simpleNotch.dmg
+            Release/simpleNotch.dmg.sha256
+          if-no-files-found: error
 
-      - name: Upload .app
+      - name: Upload preview app
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ env.PROJECT_NAME }}.app
-          path: Release/${{ env.PROJECT_NAME }}.app
+          name: simpleNotch.app
+          path: Release/simpleNotch.app
+          if-no-files-found: error

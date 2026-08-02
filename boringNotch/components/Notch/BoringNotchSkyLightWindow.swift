@@ -33,6 +33,7 @@ extension SkyLightOperator {
 
 class BoringNotchSkyLightWindow: NSPanel {
     private var isSkyLightEnabled: Bool = false
+    private var allowsShelfKeyboardFocus: Bool = false
     
     override init(
         contentRect: NSRect,
@@ -61,6 +62,7 @@ class BoringNotchSkyLightWindow: NSPanel {
         level = .mainMenu + 3
         hasShadow = false
         isReleasedWhenClosed = false
+        becomesKeyOnlyIfNeeded = true
         
         // Force dark appearance regardless of system setting
         appearance = NSAppearance(named: .darkAqua)
@@ -108,7 +110,22 @@ class BoringNotchSkyLightWindow: NSPanel {
     }
     
     private var observers: Set<AnyCancellable> = []
+
+    func setShelfKeyboardFocusEnabled(_ enabled: Bool) {
+        allowsShelfKeyboardFocus = enabled
+        if !enabled && isKeyWindow {
+            makeFirstResponder(nil)
+            resignKey()
+        }
+    }
+
+    override func resignKey() {
+        super.resignKey()
+        allowsShelfKeyboardFocus = false
+    }
     
-    override var canBecomeKey: Bool { false }
+    // Shelf items opt in with `needsPanelToBecomeKey` so they can receive Delete
+    // without activating the app for normal notch interactions.
+    override var canBecomeKey: Bool { allowsShelfKeyboardFocus }
     override var canBecomeMain: Bool { false }
 }

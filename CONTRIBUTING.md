@@ -4,7 +4,7 @@ Thank you for taking the time to contribute! ❤️
 
 These guidelines help streamline the contribution process for everyone involved. By following them, you'll make it easier for maintainers to review your work and collaborate with you effectively.
 
-You can contribute in many ways: writing code, improving documentation, reporting bugs, requesting features, or creating tutorials and blog posts. Every contribution, large or small, helps make Boring Notch better.
+You can contribute in many ways: writing code, improving documentation, reporting bugs, requesting features, or creating tutorials and blog posts. Every contribution, large or small, helps make simpleNotch better.
 
 ## Table of Contents
 
@@ -21,7 +21,7 @@ You can contribute in many ways: writing code, improving documentation, reportin
 
 ## Localizations
 
-Please submit all translations to [Crowdin](https://crowdin.com/project/boring-notch). New strings added to the `dev` branch from code changes will sync automatically to Crowdin, and Crowdin will automatically open a new PR with translations to allow us to integrate them.
+The existing translations originated in the upstream [Boring Notch Crowdin project](https://crowdin.com/project/boring-notch). Submit simpleNotch translation changes through a normal pull request unless this repository configures its own translation service.
 
 ## Contributing Code
 
@@ -32,7 +32,7 @@ Please submit all translations to [Crowdin](https://crowdin.com/project/boring-n
 <!-- - **Review the code style**: Familiarize yourself with our code style guidelines below to ensure consistency. -->
 
 > [!IMPORTANT]
-> All code contributions must be based on the `dev` branch, not `main`. Documentation changes should be based on `main` instead.
+> Base contributions on the current `main` branch and send changes through a focused feature branch.
 
 ### Setting Up Your Environment
 
@@ -40,18 +40,18 @@ Please submit all translations to [Crowdin](https://crowdin.com/project/boring-n
 
 2. **Clone your fork**:
    ```bash
-   git clone https://github.com/{your-username}/boring.notch.git
-   cd boring.notch
+   git clone https://github.com/{your-username}/simpleNotch.git
+   cd simpleNotch
    ```
    Replace `{your-username}` with your GitHub username.
 
-3. **Switch to the `dev` branch**:
+3. **Update the `main` branch**:
    ```bash
-   git checkout dev
+   git checkout main
+   git pull --ff-only
    ```
-   All code contributions must be based on the `dev` branch, not `main`. Documentation changes should be based on `main` instead.
 
-5. **Create a new feature branch**:
+4. **Create a new feature branch**:
    ```bash
    git checkout -b feature/{your-feature-name}
    ```
@@ -71,7 +71,7 @@ Please submit all translations to [Crowdin](https://crowdin.com/project/boring-n
    Write clear, concise commit messages that explain what your changes do and why.
 
 4. **Keep your branch up to date**:
-   Regularly sync your branch with the latest changes from the `dev` branch to avoid conflicts.
+   Regularly sync your branch with the latest changes from `main` to avoid conflicts.
 
 5. **Push to your fork**:
    ```bash
@@ -80,7 +80,7 @@ Please submit all translations to [Crowdin](https://crowdin.com/project/boring-n
 
 ### Pull Requests
 
-1. **Create a pull request**: Go to the original repository and click "New Pull Request." Select your feature branch and set the base branch to `dev`.
+1. **Create a pull request**: Go to the repository and click "New Pull Request." Select your feature branch and set the base branch to `main`.
 
 2. **Write a detailed description**: Your PR should include:
    - A clear title summarizing the changes
@@ -130,4 +130,4 @@ If you need help or have questions:
 
 ---
 
-Thank you for contributing to Boring Notch! Your efforts help make this project better for everyone. 🎉
+Thank you for contributing to simpleNotch! Your efforts help make this project better for everyone. 🎉

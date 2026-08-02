@@ -28,8 +28,14 @@ struct ShelfView: View {
         // Bind Quick Look to shelf selection
         .onChange(of: selection.selectedIDs) {
             updateQuickLookSelection()
+            if selection.selectedIDs.isEmpty {
+                ShelfKeyboardFocusManager.shared.resign()
+            }
         }
         .quickLookPresenter(using: quickLookService)
+        .onDisappear {
+            ShelfKeyboardFocusManager.shared.resign()
+        }
     }
     
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
@@ -40,7 +46,11 @@ struct ShelfView: View {
     }
     
     private func updateQuickLookSelection() {
-        guard quickLookService.isQuickLookOpen && !selection.selectedIDs.isEmpty else { return }
+        guard quickLookService.isQuickLookOpen else { return }
+        guard !selection.selectedIDs.isEmpty else {
+            quickLookService.hide()
+            return
+        }
         
         let selectedItems = selection.selectedItems(in: tvm.items)
         let urls: [URL] = selectedItems.compactMap { item in
@@ -53,7 +63,9 @@ struct ShelfView: View {
             return nil
         }
         
-        if !urls.isEmpty {
+        if urls.isEmpty {
+            quickLookService.hide()
+        } else {
             quickLookService.updateSelection(urls: urls)
         }
     }
@@ -74,7 +86,10 @@ struct ShelfView: View {
                 transaction.animation = vm.animation
             }
             .contentShape(Rectangle())
-            .onTapGesture { selection.clear() }
+            .onTapGesture {
+                selection.clear()
+                ShelfKeyboardFocusManager.shared.resign()
+            }
     }
 
     var content: some View {

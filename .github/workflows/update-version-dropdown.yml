@@ -3,13 +3,7 @@ name: Update Version Dropdown in Issue Form
 permissions:
   contents: write
 on:
-  push:
-    tags:
-      - '*'
   workflow_dispatch: {}
-  release:
-    types:
-      - published
 jobs:
   update-dropdown:
     runs-on: ubuntu-latest

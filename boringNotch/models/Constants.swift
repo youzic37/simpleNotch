@@ -68,6 +68,22 @@ enum OptionKeyAction: String, CaseIterable, Identifiable, Defaults.Serializable 
     var id: String { self.rawValue }
 }
 
+enum HorizontalMediaGestureMapping: String, CaseIterable, Identifiable, Defaults.Serializable {
+    case leftPreviousRightNext
+    case leftNextRightPrevious
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .leftPreviousRightNext:
+            "Left: Previous · Right: Next"
+        case .leftNextRightPrevious:
+            "Left: Next · Right: Previous"
+        }
+    }
+}
+
 extension Defaults.Keys {
     // MARK: General
     static let menubarIcon = Key<Bool>("menubarIcon", default: true)
@@ -119,6 +135,11 @@ extension Defaults.Keys {
     
     // MARK: Gestures
     static let enableGestures = Key<Bool>("enableGestures", default: true)
+    static let enableHorizontalMediaGestures = Key<Bool>("enableHorizontalMediaGestures", default: true)
+    static let horizontalMediaGestureMapping = Key<HorizontalMediaGestureMapping>(
+        "horizontalMediaGestureMapping",
+        default: .leftPreviousRightNext
+    )
     static let closeGestureEnabled = Key<Bool>("closeGestureEnabled", default: true)
     static let gestureSensitivity = Key<CGFloat>("gestureSensitivity", default: 200.0)
     

@@ -4,13 +4,13 @@ Please, go through these steps before you submit a PR.
 1. Make sure that your PR is not a duplicate.
 2. If not, then make sure that:
 
-    a. Your changes MUST NOT change translations. Please submit translations on [Crowdin](https://crowdin.com/project/boring-notch).
+    a. Keep translation changes focused and explain their source in the pull request.
 
     b. You have tested the code yourself to ensure it builds correctly and functions as intended.
 
 3. **After** these steps, you're ready to open a pull request.
 
-    a. Your pull request MUST NOT target the `main` branch on this repository. You probably want to target `dev` instead.
+    a. Target the `main` branch from a focused feature branch.
 
     b. Give a descriptive title to your PR.
 

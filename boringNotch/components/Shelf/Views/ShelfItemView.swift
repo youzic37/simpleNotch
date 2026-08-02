@@ -54,6 +54,9 @@ struct ShelfItemView: View {
                     onRightClick: viewModel.handleRightClick,
                     onClick: { event, nsview in
                         viewModel.handleClick(event: event, view: nsview)
+                    },
+                    onDelete: {
+                        removeSelectedItems()
                     }
                 )
             } else {
@@ -90,6 +93,19 @@ struct ShelfItemView: View {
             }
         }
         .quickLookPresenter(using: quickLookService)
+    }
+
+    @MainActor
+    private func removeSelectedItems() -> Bool {
+        guard !selection.isDragging,
+              !SharingStateManager.shared.preventNotchClose,
+              selection.hasSelection
+        else { return false }
+
+        if quickLookService.isQuickLookOpen {
+            quickLookService.hide()
+        }
+        return ShelfActionService.removeSelection()
     }
 
     // MARK: - View Components
@@ -176,6 +192,7 @@ private struct DraggableClickHandler<Content: View>: NSViewRepresentable {
     @ViewBuilder let dragPreviewContent: () -> Content
     let onRightClick: (NSEvent, NSView) -> Void
     let onClick: (NSEvent, NSView) -> Void
+    let onDelete: () -> Bool
     
     func makeNSView(context: Context) -> DraggableClickView {
         let view = DraggableClickView()
@@ -184,6 +201,7 @@ private struct DraggableClickHandler<Content: View>: NSViewRepresentable {
         view.dragPreviewImage = cachedPreviewImage ?? renderDragPreview()
         view.onRightClick = onRightClick
         view.onClick = onClick
+        view.onDelete = onDelete
         return view
     }
     
@@ -196,6 +214,7 @@ private struct DraggableClickHandler<Content: View>: NSViewRepresentable {
         }
         nsView.onRightClick = onRightClick
         nsView.onClick = onClick
+        nsView.onDelete = onDelete
     }
     
     private func renderDragPreview() -> NSImage {
@@ -217,19 +236,66 @@ private struct DraggableClickHandler<Content: View>: NSViewRepresentable {
         var dragPreviewImage: NSImage?
         var onRightClick: ((NSEvent, NSView) -> Void)?
         var onClick: ((NSEvent, NSView) -> Void)?
+        var onDelete: (() -> Bool)?
 
         private var mouseDownEvent: NSEvent?
         private let dragThreshold: CGFloat = 3.0
         private var draggedURLs: [URL] = []
         private var draggedItems: [ShelfItem] = []
+
+        override var acceptsFirstResponder: Bool { true }
+        override var needsPanelToBecomeKey: Bool { true }
         
         override func rightMouseDown(with event: NSEvent) {
+            if !ShelfSelectionModel.shared.isSelected(item.id) {
+                ShelfSelectionModel.shared.selectSingle(item)
+            }
+            updateKeyboardFocus()
             onRightClick?(event, self)
         }
         
         override func mouseDown(with event: NSEvent) {
             mouseDownEvent = event
+
+            if event.modifierFlags.contains(.control) {
+                if !ShelfSelectionModel.shared.isSelected(item.id) {
+                    ShelfSelectionModel.shared.selectSingle(item)
+                }
+                updateKeyboardFocus()
+                onClick?(event, self)
+                return
+            }
+
             onClick?(event, self)
+            if event.clickCount == 2 {
+                ShelfKeyboardFocusManager.shared.resign()
+            } else {
+                updateKeyboardFocus()
+            }
+        }
+
+        override func keyDown(with event: NSEvent) {
+            let isDeleteKey = event.keyCode == 51 || event.keyCode == 117
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let hasUnsupportedModifier = !modifiers.intersection([.command, .control, .option]).isEmpty
+
+            guard isDeleteKey, !hasUnsupportedModifier else {
+                super.keyDown(with: event)
+                return
+            }
+            guard !event.isARepeat else { return }
+
+            if onDelete?() == true {
+                ShelfKeyboardFocusManager.shared.resign()
+            }
+        }
+
+        private func updateKeyboardFocus() {
+            if ShelfSelectionModel.shared.hasSelection {
+                ShelfKeyboardFocusManager.shared.focus(self)
+            } else {
+                ShelfKeyboardFocusManager.shared.resign()
+            }
         }
         
         override func mouseDragged(with event: NSEvent) {
@@ -342,6 +408,7 @@ private struct DraggableClickHandler<Content: View>: NSViewRepresentable {
         
         func draggingSession(_ session: NSDraggingSession, willBeginAt screenPoint: NSPoint) {
             ShelfSelectionModel.shared.beginDrag()
+            ShelfKeyboardFocusManager.shared.resign()
         }
         
         

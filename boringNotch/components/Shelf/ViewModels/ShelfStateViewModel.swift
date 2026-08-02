@@ -44,8 +44,23 @@ final class ShelfStateViewModel: ObservableObject {
     }
 
     func remove(_ item: ShelfItem) {
-        item.cleanupStoredData()
-        items.removeAll { $0.id == item.id }
+        remove([item])
+    }
+
+    func remove(_ itemsToRemove: [ShelfItem]) {
+        let ids = Set(itemsToRemove.map(\.id))
+        guard !ids.isEmpty else { return }
+
+        let storedItems = items.filter { ids.contains($0.id) }
+        guard !storedItems.isEmpty else { return }
+
+        storedItems.forEach { $0.cleanupStoredData() }
+        pendingBookmarkUpdates = pendingBookmarkUpdates.filter { !ids.contains($0.key) }
+        if pendingBookmarkUpdates.isEmpty {
+            updateTask?.cancel()
+            updateTask = nil
+        }
+        items.removeAll { ids.contains($0.id) }
     }
 
     func updateBookmark(for item: ShelfItem, bookmark: Data) {

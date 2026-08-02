@@ -2,14 +2,16 @@
 set -euo pipefail
 
 # Minimal wrapper to create a DMG using dmgbuild.
-# Usage: ./create_dmg.sh <app_path> <dmg_output> <volume_name>
+# Usage: ./create_dmg.sh <app_path> <dmg_output> <volume_name> [dependency_licenses_dir]
 
 APP_PATH="${1:?App path required}"
 DMG_OUTPUT="${2:?DMG output path required}"
 VOLUME_NAME="${3:?Volume name required}"
+DEPENDENCY_LICENSES_PATH="${4:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETTINGS="$SCRIPT_DIR/dmgbuild_settings.py"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 BACKGROUND_DIR="$SCRIPT_DIR/.background"
 
@@ -78,6 +80,13 @@ ensure_dmgbuild_and_badge_support
 
 export DMG_APP_PATH="$(abs_path "$APP_PATH")"
 export DMG_VOLUME_NAME="$VOLUME_NAME"
+export DMG_LICENSE_PATH="$(abs_path "$PROJECT_ROOT/LICENSE")"
+export DMG_THIRD_PARTY_LICENSES_PATH="$(abs_path "$PROJECT_ROOT/THIRD_PARTY_LICENSES")"
+if [ -n "$DEPENDENCY_LICENSES_PATH" ]; then
+  export DMG_DEPENDENCY_LICENSES_PATH="$(abs_path "$DEPENDENCY_LICENSES_PATH")"
+else
+  export DMG_DEPENDENCY_LICENSES_PATH=""
+fi
 
 BACKGROUND_TIFF="$BACKGROUND_DIR/background.tiff"
 
@@ -96,8 +105,16 @@ echo "Creating DMG via dmgbuild: app=$DMG_APP_PATH output=$DMG_OUTPUT volume=$DM
 # Validate inputs early to give clearer errors for common typos
 if [ ! -e "$DMG_APP_PATH" ]; then
   echo "Error: App path not found: $DMG_APP_PATH" >&2
-  echo "Make sure you passed the correct .app path (e.g. Release/boringNotch.app)" >&2
+  echo "Make sure you passed the correct .app path (e.g. Release/simpleNotch.app)" >&2
   exit 2
+fi
+
+if [ ! -f "$DMG_LICENSE_PATH" ] || [ ! -f "$DMG_THIRD_PARTY_LICENSES_PATH" ]; then
+  die "LICENSE or THIRD_PARTY_LICENSES is missing from the project root"
+fi
+
+if [ -n "$DMG_DEPENDENCY_LICENSES_PATH" ] && [ ! -d "$DMG_DEPENDENCY_LICENSES_PATH" ]; then
+  die "Dependency licenses directory not found: $DMG_DEPENDENCY_LICENSES_PATH"
 fi
 
 if [ ! -d "$DMG_APP_PATH" ]; then

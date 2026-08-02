@@ -5,8 +5,9 @@
 //  Created by Alexander on 2025-09-26.
 //
 
-import Foundation
+import AppKit
 import Combine
+import Foundation
 
 private let _shelfTypeAnchor: Bool = {
     _ = String(describing: ShelfItem.self)
@@ -83,5 +84,55 @@ final class ShelfSelectionModel: ObservableObject {
 
     func endDrag() {
         isDragging = false
+    }
+}
+
+@MainActor
+final class ShelfKeyboardFocusManager {
+    static let shared = ShelfKeyboardFocusManager()
+
+    private weak var focusedView: NSView?
+    private weak var focusedWindow: NSWindow?
+
+    private init() {}
+
+    func focus(_ view: NSView) {
+        guard let window = view.window else { return }
+
+        if focusedView !== view {
+            resign()
+        }
+
+        if let notchWindow = window as? BoringNotchSkyLightWindow {
+            notchWindow.setShelfKeyboardFocusEnabled(true)
+        }
+        window.makeKey()
+        if window.makeFirstResponder(view) {
+            focusedView = view
+            focusedWindow = window
+        } else if window.isKeyWindow {
+            window.resignKey()
+        } else if let notchWindow = window as? BoringNotchSkyLightWindow {
+            notchWindow.setShelfKeyboardFocusEnabled(false)
+        }
+    }
+
+    func resign() {
+        let view = focusedView
+        let window = view?.window ?? focusedWindow
+
+        if let notchWindow = window as? BoringNotchSkyLightWindow {
+            notchWindow.setShelfKeyboardFocusEnabled(false)
+        } else {
+            if view != nil, window?.firstResponder === view {
+                window?.makeFirstResponder(nil)
+            }
+            if window?.isKeyWindow == true {
+                window?.resignKey()
+            }
+        }
+
+        focusedView = nil
+        focusedWindow = nil
     }
 }

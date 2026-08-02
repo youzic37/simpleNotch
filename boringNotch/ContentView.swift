@@ -37,6 +37,9 @@ struct ContentView: View {
 
     @Default(.showNotHumanFace) var showNotHumanFace
 
+    @Default(.enableGestures) var enableGestures
+    @Default(.enableHorizontalMediaGestures) var enableHorizontalMediaGestures
+
     // Shared interactive spring for movement/resizing to avoid conflicting animations
     private let animationSpring = Animation.interactiveSpring(response: 0.38, dampingFraction: 0.8, blendDuration: 0)
 
@@ -87,7 +90,6 @@ struct ContentView: View {
             let scaleFactor = 1.0 + gestureProgress * 0.01
             return max(0.6, scaleFactor)
         }()
-        
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
                 let mainLayout = NotchLayout()
@@ -134,17 +136,25 @@ struct ContentView: View {
                     .onTapGesture {
                         doOpen()
                     }
-                    .conditionalModifier(Defaults[.enableGestures]) { view in
+                    .conditionalModifier(enableGestures) { view in
                         view
                             .panGesture(direction: .down) { translation, phase in
                                 handleDownGesture(translation: translation, phase: phase)
                             }
                     }
-                    .conditionalModifier(Defaults[.closeGestureEnabled] && Defaults[.enableGestures]) { view in
+                    .conditionalModifier(Defaults[.closeGestureEnabled] && enableGestures) { view in
                         view
                             .panGesture(direction: .up) { translation, phase in
                                 handleUpGesture(translation: translation, phase: phase)
                             }
+                    }
+                    .trackpadHorizontalSwipe(
+                        enabled: enableHorizontalMediaGestures
+                            && enableGestures
+                            && isMediaGestureContext,
+                        threshold: Defaults[.gestureSensitivity]
+                    ) { direction in
+                        handleHorizontalMediaSwipe(direction: direction)
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .sharingDidFinish)) { _ in
                         if vm.notchState == .open && !isHovering && !vm.isBatteryPopoverActive {
@@ -189,6 +199,11 @@ struct ContentView: View {
                             }
                         }
                         .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
+                        Divider()
+                        Button("Quit", role: .destructive) {
+                            NSApplication.shared.terminate(nil)
+                        }
+                        .keyboardShortcut(KeyEquivalent("Q"), modifiers: .command)
                         //                    Button("Edit") { // Doesnt work....
                         //                        let dn = DynamicNotch(content: EditPanelView())
                         //                        dn.toggle()
@@ -608,6 +623,47 @@ struct ContentView: View {
                 haptics.toggle()
             }
         }
+    }
+
+    private func handleHorizontalMediaSwipe(direction: PanDirection) {
+        guard enableGestures,
+              enableHorizontalMediaGestures,
+              isMediaGestureContext
+        else { return }
+
+        switch (Defaults[.horizontalMediaGestureMapping], direction) {
+        case (.leftPreviousRightNext, .left), (.leftNextRightPrevious, .right):
+            musicManager.previousTrack()
+        case (.leftPreviousRightNext, .right), (.leftNextRightPrevious, .left):
+            musicManager.nextTrack()
+        default:
+            return
+        }
+
+        if Defaults[.enableHaptics] {
+            haptics.toggle()
+        }
+    }
+
+    private var isMediaGestureContext: Bool {
+        switch vm.notchState {
+        case .closed:
+            return isCompactMediaGestureContext
+        case .open:
+            return coordinator.currentView == .home
+                && !musicManager.isPlayerIdle
+        }
+    }
+
+    private var isCompactMediaGestureContext: Bool {
+        guard vm.notchState == .closed,
+              !vm.hideOnClosed,
+              !coordinator.sneakPeek.show || coordinator.sneakPeek.type == .music,
+              !coordinator.expandingView.show || coordinator.expandingView.type == .music
+        else { return false }
+
+        return coordinator.musicLiveActivityEnabled
+            && (musicManager.isPlaying || !musicManager.isPlayerIdle)
     }
 }
 
